@@ -1,0 +1,2162 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Get Out! — Tactical Board Game | getout.ekkman.site</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    :root {
+      --p1-color: #7C3AED;
+      --p2-color: #E11D48;
+      --bg-page: #F6F7F9;
+      --bg-card: #FFFFFF;
+      --bg-subtle: #EEF0F4;
+      --bg-hover: #E5E8EE;
+      --border-hairline: #E2E5EC;
+      --border-strong: #CBD2DF;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --cell-light: #FFFFFF;
+      --cell-dark: #EEF1F6;
+      --coord-on-light: #94A3B8;
+      --coord-on-dark: #64748B;
+      --last-move-tint: rgba(245, 158, 11, 0.20);
+      --board-frame: #DCE1EA;
+    }
+
+    html.dark {
+      --bg-page: #0B0C0E;
+      --bg-card: #131519;
+      --bg-subtle: #1B1E24;
+      --bg-hover: #242830;
+      --border-hairline: #232730;
+      --border-strong: #323846;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --cell-light: #1D2026;
+      --cell-dark: #15171C;
+      --coord-on-light: #64748B;
+      --coord-on-dark: #475569;
+      --last-move-tint: rgba(251, 191, 36, 0.16);
+      --board-frame: #262B36;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      font-family: 'Inter', system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .card-surface {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .subtle-surface {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .hairline-border {
+      border-color: var(--border-hairline);
+    }
+
+    .muted-text {
+      color: var(--text-muted);
+    }
+
+    /* Outer Architectural Frame for 4x12 Board */
+    .board-frame {
+      padding: 5px;
+      border-radius: 14px;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 8px 24px -6px rgba(15, 23, 42, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
+    }
+
+    html.dark .board-frame {
+      box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.55);
+    }
+
+    .board-grid {
+      aspect-ratio: 4 / 12;
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(12, 1fr);
+      border-radius: 9px;
+      overflow: hidden;
+      border: 1px solid var(--border-hairline);
+      background-color: var(--cell-light);
+    }
+
+    .board-cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid var(--border-hairline);
+      border-bottom: 1px solid var(--border-hairline);
+      cursor: pointer;
+      transition: background-color 0.14s ease;
+    }
+
+    .board-cell:nth-child(4n) {
+      border-right: none;
+    }
+
+    .board-cell:nth-last-child(-n+4) {
+      border-bottom: none;
+    }
+
+    /* Architectural Goal Zones */
+    .goal-zone-pattern {
+      background-image: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 5px,
+        rgba(128, 128, 128, 0.13) 5px,
+        rgba(128, 128, 128, 0.13) 7.5px
+      );
+    }
+
+    .last-move-overlay {
+      position: absolute;
+      inset: 0;
+      background-color: var(--last-move-tint);
+      pointer-events: none;
+    }
+
+    .selected-tile-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.18;
+    }
+
+    /* Algebraic Coordinates tucked neatly in cell corners */
+    .coord-rank {
+      position: absolute;
+      top: 2px;
+      left: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8.5px;
+      font-weight: 600;
+      line-height: 1;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    .coord-file {
+      position: absolute;
+      bottom: 2px;
+      right: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8.5px;
+      font-weight: 600;
+      line-height: 1;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    /* Pieces Layer & Smooth Spring Kinematics */
+    .pieces-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .piece-node {
+      position: absolute;
+      width: 25%;
+      height: 8.333333%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.25s cubic-bezier(0.2, 0.88, 0.32, 1), opacity 0.2s ease;
+      will-change: transform;
+      z-index: 10;
+    }
+
+    .piece-node.jumping {
+      z-index: 25;
+    }
+
+    .piece-body {
+      width: 78%;
+      height: 78%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.16s cubic-bezier(0.2, 0.88, 0.32, 1), filter 0.16s ease;
+      filter: drop-shadow(0 2px 2.5px rgba(0, 0, 0, 0.22));
+    }
+
+    .piece-node.movable .piece-body {
+      transform: translateY(-0.5px);
+    }
+
+    .piece-node.selected .piece-body {
+      transform: translateY(-2px) scale(1.13);
+      filter: drop-shadow(0 5px 6px rgba(0, 0, 0, 0.28));
+    }
+
+    .piece-node.jumping .piece-body {
+      animation: vaultHop 0.28s cubic-bezier(0.2, 0.88, 0.32, 1);
+    }
+
+    @keyframes vaultHop {
+      0% { transform: scale(1) translateY(0); }
+      45% { transform: scale(1.28) translateY(-5px); }
+      100% { transform: scale(1) translateY(0); }
+    }
+
+    /* Legal Move & Capture Indicators */
+    .valid-dot {
+      width: 28%;
+      height: 28%;
+      border-radius: 9999px;
+      pointer-events: none;
+      opacity: 0.78;
+      transition: transform 0.14s ease, opacity 0.14s ease;
+      z-index: 5;
+    }
+
+    .board-cell:hover .valid-dot {
+      transform: scale(1.26);
+      opacity: 1;
+    }
+
+    .capture-brackets {
+      position: absolute;
+      inset: 12%;
+      pointer-events: none;
+      z-index: 15;
+      transition: transform 0.14s ease;
+    }
+
+    .board-cell:hover .capture-brackets {
+      transform: scale(1.06);
+    }
+
+    .goal-target-badge {
+      position: absolute;
+      inset: 12%;
+      border-radius: 7px;
+      border: 2px solid #10B981;
+      background-color: rgba(16, 185, 129, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 15;
+      animation: goalPulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes goalPulse {
+      0%, 100% { transform: scale(0.96); opacity: 0.85; }
+      50% { transform: scale(1.04); opacity: 1; }
+    }
+
+    /* Capture Ripple Effect */
+    .capture-ripple {
+      position: absolute;
+      width: 70%;
+      height: 70%;
+      border-radius: 9999px;
+      border: 2.5px solid currentColor;
+      pointer-events: none;
+      z-index: 20;
+      animation: rippleOut 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes rippleOut {
+      0% { transform: scale(0.5); opacity: 0.9; }
+      100% { transform: scale(1.45); opacity: 0; }
+    }
+
+    /* Vertical Evaluation Bar */
+    .eval-track {
+      width: 7px;
+      border-radius: 9999px;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .eval-fill-top {
+      transition: height 0.38s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s ease;
+    }
+
+    .eval-fill-bottom {
+      flex: 1;
+      transition: background-color 0.2s ease;
+    }
+
+    .eval-midline {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 1.5px;
+      background-color: rgba(255, 255, 255, 0.75);
+      mix-blend-mode: difference;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Minimalist Top Navigation Bar -->
+  <header class="w-full border-b hairline-border card-surface sticky top-0 z-30">
+    <div class="max-w-3xl mx-auto px-4 h-12 flex items-center justify-between">
+      <button id="btn-nav-home" class="flex items-center gap-2.5 group focus:outline-none">
+        <!-- Custom Geometric Brand Emblem -->
+        <span class="w-6 h-6 rounded-md flex items-center justify-center text-white transition-transform group-hover:scale-105"
+              style="background-color: var(--p1-color);">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 17L17 7"/><path d="M8 7h9v9"/>
+          </svg>
+        </span>
+        <span class="font-bold tracking-tight text-sm">Get Out!</span>
+        <span class="hidden sm:inline-block font-mono text-[11px] px-1.5 py-0.5 rounded subtle-surface muted-text">getout.ekkman.site</span>
+      </button>
+
+      <div class="flex items-center gap-1.5">
+        <button id="btn-open-rules" class="px-2.5 py-1.5 rounded-lg text-xs font-medium subtle-surface hover:opacity-85 transition flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 muted-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>How to Play</span>
+        </button>
+
+        <!-- Quick Header Sound Toggle -->
+        <button id="btn-quick-sound" class="p-1.5 rounded-lg subtle-surface hover:opacity-85 transition" aria-label="Toggle sound" title="Toggle Sound">
+          <svg id="icon-sound-on" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+          <svg id="icon-sound-off" class="hidden w-4 h-4 muted-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+          </svg>
+        </button>
+
+        <!-- Light / Dark Theme Toggle -->
+        <button id="btn-toggle-theme" class="p-1.5 rounded-lg subtle-surface hover:opacity-85 transition" aria-label="Toggle theme" title="Toggle Light/Dark Theme">
+          <svg id="icon-sun" class="hidden w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+          </svg>
+          <svg id="icon-moon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+          </svg>
+        </button>
+
+        <!-- Settings Gear -->
+        <button id="btn-open-settings" class="p-1.5 rounded-lg subtle-surface hover:opacity-85 transition" aria-label="Settings" title="Settings">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 w-full max-w-3xl mx-auto px-4 py-4 flex flex-col items-center justify-center">
+
+    <!-- ==================== VIEW 1: CHESSING-INSPIRED LOBBY CARD ==================== -->
+    <section id="view-lobby" class="w-full max-w-[360px] card-surface rounded-2xl p-6 flex flex-col gap-5 shadow-sm">
+      <!-- Mini Hero Preview Strip -->
+      <div class="flex flex-col items-center text-center gap-2">
+        <div id="lobby-piece-strip" class="flex items-center justify-center gap-2.5 py-1"></div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight">Get Out!</h1>
+          <p class="text-xs muted-text mt-0.5">Breach the opposite goal zone or eliminate all rivals.</p>
+        </div>
+      </div>
+
+      <!-- Segmented Mode Selector -->
+      <div class="grid grid-cols-3 gap-1 p-1 rounded-xl subtle-surface">
+        <button data-mode="bot" class="mode-pill py-1.5 rounded-lg text-xs font-semibold transition card-surface shadow-xs">
+          Play Bot
+        </button>
+        <button data-mode="online" class="mode-pill py-1.5 rounded-lg text-xs font-medium muted-text hover:opacity-90 transition">
+          Online
+        </button>
+        <button data-mode="local" class="mode-pill py-1.5 rounded-lg text-xs font-medium muted-text hover:opacity-90 transition">
+          Pass &amp; Play
+        </button>
+      </div>
+
+      <!-- Panel: Play vs Bot -->
+      <div id="panel-bot" class="flex flex-col gap-3.5">
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-medium muted-text">Engine Strength</span>
+            <span id="diff-caption" class="text-[11px] font-mono muted-text">2-ply lookahead</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button data-diff="casual" class="diff-pill py-2 px-3 rounded-xl text-xs font-medium subtle-surface transition flex items-center justify-center gap-1.5">
+              <span>Casual</span>
+            </button>
+            <button data-diff="tactical" class="diff-pill py-2 px-3 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5"
+                    style="border-color: var(--p1-color); color: var(--p1-color);">
+              <span>Tactical</span>
+            </button>
+          </div>
+        </div>
+
+        <button id="btn-start-bot" class="w-full py-2.5 rounded-xl text-xs font-semibold text-white transition hover:opacity-95 active:scale-[0.99] shadow-xs"
+                style="background-color: var(--p1-color);">
+          Start Match
+        </button>
+      </div>
+
+      <!-- Panel: Online Multiplayer -->
+      <div id="panel-online" class="hidden flex-col gap-3">
+        <button id="btn-find-match" class="w-full py-2.5 rounded-xl text-xs font-semibold text-white transition hover:opacity-95 active:scale-[0.99] shadow-xs"
+                style="background-color: var(--p1-color);">
+          Queue Quick Match
+        </button>
+
+        <div class="flex items-center gap-3">
+          <div class="h-px flex-1 bg-[var(--border-hairline)]"></div>
+          <span class="text-[11px] muted-text">or private room</span>
+          <div class="h-px flex-1 bg-[var(--border-hairline)]"></div>
+        </div>
+
+        <button id="btn-create-room" class="w-full py-2 rounded-xl text-xs font-semibold subtle-surface hover:opacity-85 transition">
+          Create Private Room
+        </button>
+
+        <div class="flex items-center gap-2">
+          <input id="input-room-code" type="text" maxlength="6" placeholder="ROOM CODE"
+                 class="flex-1 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider subtle-surface focus:outline-none" />
+          <button id="btn-join-room" class="px-4 py-2 rounded-xl text-xs font-semibold subtle-surface hover:opacity-85 transition">
+            Join
+          </button>
+        </div>
+
+        <!-- Waiting / Invite Box with Elapsed Timer -->
+        <div id="lobby-wait-box" class="hidden p-3 rounded-xl subtle-surface flex flex-col gap-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span id="lobby-wait-text" class="font-medium">Waiting...</span>
+              <span id="lobby-wait-timer" class="font-mono text-[11px] muted-text">0:00</span>
+            </div>
+            <button id="btn-cancel-wait" class="text-[11px] text-rose-500 font-medium hover:underline">Cancel</button>
+          </div>
+          <div id="lobby-invite-row" class="hidden flex items-center gap-1.5">
+            <input id="input-invite-url" type="text" readonly class="flex-1 text-[11px] font-mono px-2.5 py-1.5 rounded-lg card-surface muted-text focus:outline-none" />
+            <button id="btn-copy-link" class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-white shrink-0" style="background-color: var(--p1-color);">
+              Copy Link
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel: Pass & Play -->
+      <div id="panel-local" class="hidden flex-col gap-3">
+        <p class="text-xs muted-text text-center py-1 leading-relaxed">
+          Two players alternate turns on the same device.
+        </p>
+        <button id="btn-start-local" class="w-full py-2.5 rounded-xl text-xs font-semibold text-white transition hover:opacity-95 active:scale-[0.99] shadow-xs"
+                style="background-color: var(--p1-color);">
+          Start Local Game
+        </button>
+      </div>
+
+      <!-- Footer Link -->
+      <div class="pt-2.5 border-t hairline-border flex items-center justify-between text-xs">
+        <button id="btn-lobby-rules" class="font-medium hover:underline flex items-center gap-1" style="color: var(--p1-color);">
+          <span>Piece Rules &amp; Diagrams</span>
+          <span>&rarr;</span>
+        </button>
+        <span class="font-mono text-[11px] muted-text">4&times;12 Grid</span>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: ACTIVE MATCH SCREEN ==================== -->
+    <section id="view-game" class="hidden w-full max-w-[330px] sm:max-w-[356px] flex-col items-center gap-2.5">
+      
+      <!-- Top Player Bar (Opponent) -->
+      <div id="bar-p2" class="w-full px-3 py-2 rounded-xl card-surface flex items-center justify-between transition-all">
+        <div class="flex items-center gap-2 min-w-0">
+          <div id="avatar-p2" class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-white font-mono text-[11px] font-bold"
+               style="background-color: var(--p2-color);">
+            P2
+          </div>
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span id="label-p2-name" class="text-xs font-semibold truncate">Opponent</span>
+              <span id="eval-label-top" class="hidden font-mono text-[10px] px-1 rounded subtle-surface muted-text">0.0</span>
+            </div>
+            <!-- Captured pieces tray (opponent's captures) -->
+            <div id="tray-p2" class="flex items-center gap-0.5 h-3.5 mt-0.5"></div>
+          </div>
+        </div>
+        <span id="turn-pill-p2" class="hidden px-2 py-0.5 rounded-md text-[10px] font-semibold text-white shrink-0"
+              style="background-color: var(--p2-color);">
+          Turn
+        </span>
+      </div>
+
+      <!-- Centered 4x12 Board + Optional Evaluation Bar -->
+      <div class="flex items-stretch justify-center gap-2">
+        <!-- Vertical Advantage / Evaluation Bar -->
+        <div id="eval-bar-container" class="hidden eval-track my-1" title="Positional & Material Advantage">
+          <div id="eval-fill-top" class="eval-fill-top" style="height: 50%; background-color: var(--p2-color);"></div>
+          <div id="eval-fill-bottom" class="eval-fill-bottom" style="background-color: var(--p1-color);"></div>
+          <div class="eval-midline"></div>
+        </div>
+
+        <!-- Framed 4x12 Board -->
+        <div class="board-frame w-[196px] sm:w-[214px]">
+          <div id="board-grid" class="board-grid">
+            <div id="cells-layer" class="contents"></div>
+            <div id="pieces-layer" class="pieces-layer"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirm Move Bar (Appears when Confirm Move is ON and a destination is staged) -->
+      <div id="confirm-bar" class="hidden w-full grid grid-cols-2 gap-2">
+        <button id="btn-confirm-move" class="py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-xs">
+          Confirm Move
+        </button>
+        <button id="btn-cancel-move" class="py-1.5 rounded-xl text-xs font-semibold subtle-surface hover:opacity-80 transition">
+          Cancel
+        </button>
+      </div>
+
+      <!-- Bottom Player Bar (You) -->
+      <div id="bar-p1" class="w-full px-3 py-2 rounded-xl card-surface flex items-center justify-between transition-all">
+        <div class="flex items-center gap-2 min-w-0">
+          <div id="avatar-p1" class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-white font-mono text-[11px] font-bold"
+               style="background-color: var(--p1-color);">
+            P1
+          </div>
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span id="label-p1-name" class="text-xs font-semibold truncate">You</span>
+              <span id="move-counter-badge" class="font-mono text-[10px] muted-text">Move 1</span>
+            </div>
+            <!-- Captured pieces tray (your captures) -->
+            <div id="tray-p1" class="flex items-center gap-0.5 h-3.5 mt-0.5"></div>
+          </div>
+        </div>
+        <span id="turn-pill-p1" class="px-2 py-0.5 rounded-md text-[10px] font-semibold text-white shrink-0"
+              style="background-color: var(--p1-color);">
+          Your Turn
+        </span>
+      </div>
+
+      <!-- Compact Action Bar -->
+      <div class="w-full grid grid-cols-3 gap-1.5 pt-0.5">
+        <button id="btn-undo" class="py-1.5 rounded-xl text-xs font-medium subtle-surface hover:opacity-85 transition disabled:opacity-40 flex items-center justify-center gap-1">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+          </svg>
+          <span>Undo</span>
+        </button>
+        <button id="btn-restart" class="py-1.5 rounded-xl text-xs font-medium subtle-surface hover:opacity-85 transition flex items-center justify-center gap-1">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>
+          </svg>
+          <span>Restart</span>
+        </button>
+        <button id="btn-leave" class="py-1.5 rounded-xl text-xs font-medium subtle-surface text-rose-500 hover:opacity-85 transition flex items-center justify-center gap-1">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Leave</span>
+        </button>
+      </div>
+
+      <!-- Subtle Piece Rule Hint -->
+      <div id="piece-hint-line" class="w-full text-center text-[11px] muted-text min-h-[16px] px-2 truncate">
+        Select a piece to inspect its moves.
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== VICTORY MODAL ==================== -->
+  <div id="modal-victory" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4">
+    <div class="w-full max-w-xs card-surface rounded-2xl p-6 text-center flex flex-col gap-3 shadow-xl">
+      <div id="victory-badge" class="w-11 h-11 rounded-xl mx-auto flex items-center justify-center text-white"
+           style="background-color: var(--p1-color);">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+        </svg>
+      </div>
+      <div>
+        <h2 id="victory-heading" class="text-lg font-bold tracking-tight">You Win!</h2>
+        <p id="victory-desc" class="text-xs muted-text mt-1">Entered the opponent's goal zone.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-2">
+        <button id="btn-win-home" class="py-2 rounded-xl text-xs font-semibold subtle-surface hover:opacity-85 transition">
+          Lobby
+        </button>
+        <button id="btn-win-again" class="py-2 rounded-xl text-xs font-semibold text-white hover:opacity-95 transition"
+                style="background-color: var(--p1-color);">
+          Rematch
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== HOW TO PLAY MODAL (WITH MINI DIAGRAMS) ==================== -->
+  <div id="modal-rules" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4">
+    <div class="w-full max-w-md card-surface rounded-2xl max-h-[86vh] flex flex-col overflow-hidden shadow-xl">
+      <div class="px-5 py-3.5 border-b hairline-border flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-bold">How to Play</h2>
+          <span class="font-mono text-[10px] px-1.5 py-0.5 rounded subtle-surface muted-text">Rules</span>
+        </div>
+        <button id="btn-close-rules" class="text-xs font-medium muted-text hover:opacity-80 px-2 py-1 rounded-lg subtle-surface">Close</button>
+      </div>
+
+      <div class="p-5 overflow-y-auto flex flex-col gap-4 text-xs">
+        <div class="p-3.5 rounded-xl subtle-surface flex flex-col gap-1.5">
+          <span class="font-bold">Objective</span>
+          <p class="muted-text leading-relaxed">
+            Advance any one of your 8 pieces into the shaded <strong>Opponent Goal Zone</strong> (Row 12) at the far end of the 4&times;12 board, or eliminate all opposing pieces.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold">The 4 Tactical Pieces</span>
+            <div class="flex items-center gap-3 text-[10px] muted-text">
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full inline-block" style="background-color: var(--p1-color);"></span> Move</span>
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-xs border border-rose-500 inline-block"></span> Capture</span>
+            </div>
+          </div>
+          <div id="rules-pieces-container" class="flex flex-col gap-2.5"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SETTINGS MODAL ==================== -->
+  <div id="modal-settings" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4">
+    <div class="w-full max-w-sm card-surface rounded-2xl max-h-[88vh] flex flex-col overflow-hidden shadow-xl">
+      <div class="px-5 py-3.5 border-b hairline-border flex items-center justify-between">
+        <h2 class="text-sm font-bold">Settings</h2>
+        <button id="btn-close-settings" class="text-xs font-semibold px-2.5 py-1 rounded-lg text-white" style="background-color: var(--p1-color);">Done</button>
+      </div>
+
+      <div class="p-5 overflow-y-auto flex flex-col gap-4 text-xs">
+        <!-- Gameplay & Interface Toggles -->
+        <div class="flex flex-col gap-2">
+          <label class="flex items-center justify-between p-2.5 rounded-xl subtle-surface cursor-pointer">
+            <div>
+              <div class="font-semibold">Confirm Move</div>
+              <div class="text-[11px] muted-text">Preview destination before committing</div>
+            </div>
+            <input id="opt-confirm" type="checkbox" class="w-4 h-4 rounded cursor-pointer accent-violet-600" />
+          </label>
+
+          <label class="flex items-center justify-between p-2.5 rounded-xl subtle-surface cursor-pointer">
+            <div>
+              <div class="font-semibold">Show Move Hints</div>
+              <div class="text-[11px] muted-text">Highlight legal destinations &amp; captures</div>
+            </div>
+            <input id="opt-valid" type="checkbox" checked class="w-4 h-4 rounded cursor-pointer accent-violet-600" />
+          </label>
+
+          <label class="flex items-center justify-between p-2.5 rounded-xl subtle-surface cursor-pointer">
+            <div>
+              <div class="font-semibold">Evaluation Bar</div>
+              <div class="text-[11px] muted-text">Show real-time positional advantage bar</div>
+            </div>
+            <input id="opt-eval" type="checkbox" checked class="w-4 h-4 rounded cursor-pointer accent-violet-600" />
+          </label>
+
+          <label class="flex items-center justify-between p-2.5 rounded-xl subtle-surface cursor-pointer">
+            <div>
+              <div class="font-semibold">Sound Effects</div>
+              <div class="text-[11px] muted-text">Tactile board clicks &amp; capture thuds</div>
+            </div>
+            <input id="opt-sound" type="checkbox" checked class="w-4 h-4 rounded cursor-pointer accent-violet-600" />
+          </label>
+
+          <label class="flex items-center justify-between p-2.5 rounded-xl subtle-surface cursor-pointer">
+            <div>
+              <div class="font-semibold">Ambient Lo-Fi</div>
+              <div class="text-[11px] muted-text">Soft synthesized focus chords</div>
+            </div>
+            <input id="opt-ambient" type="checkbox" class="w-4 h-4 rounded cursor-pointer accent-violet-600" />
+          </label>
+        </div>
+
+        <!-- Custom Player Colors -->
+        <div class="flex flex-col gap-2.5 pt-2 border-t hairline-border">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold">Piece &amp; Zone Colors</span>
+            <button id="btn-reset-colors" class="text-[11px] muted-text hover:underline">Reset defaults</button>
+          </div>
+
+          <div class="p-3 rounded-xl subtle-surface flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="font-medium">Your Color</span>
+              <input id="color-p1" type="color" value="#7C3AED" class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent" />
+            </div>
+            <div id="swatches-p1" class="flex items-center gap-1.5 flex-wrap"></div>
+          </div>
+
+          <div class="p-3 rounded-xl subtle-surface flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="font-medium">Opponent Color</span>
+              <input id="color-p2" type="color" value="#E11D48" class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent" />
+            </div>
+            <div id="swatches-p2" class="flex items-center gap-1.5 flex-wrap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Minimal Toast -->
+  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-xl text-xs font-medium card-surface shadow-md opacity-0 pointer-events-none transition-opacity duration-200">
+    Notice
+  </div>
+
+  <!-- ==================== GAME ENGINE & MULTIPLAYER ==================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // -------------------------------------------------------------------------
+    // 1. PIECE DEFINITIONS & STAUNTON-INSPIRED GEOMETRIC SVGS
+    // -------------------------------------------------------------------------
+    const PIECES = {
+      1: {
+        name: "Crescent Vanguard",
+        short: "Crescent",
+        hint: "Crescent: 1–2 empty squares forward, 1 back. Captures ONLY by jumping straight over an enemy.",
+        rules: "Steps 1 or 2 empty squares straight forward (cannot leap over a piece to reach the 2nd square), or 1 empty square straight backward. Captures ONLY by jumping straight forward over an adjacent enemy onto the empty square immediately behind it.",
+        diagram: {
+          pieceCell: [2, 1],
+          enemyCell: [1, 1],
+          moveCells: [[3, 1]],
+          captureCells: [[0, 1]]
+        }
+      },
+      2: {
+        name: "Windmill Strider",
+        short: "Windmill",
+        hint: "Windmill: 1 square diagonally in any direction. Cannot capture.",
+        rules: "Steps 1 square diagonally in any of the 4 diagonal directions into an empty square. Cannot capture opponent pieces.",
+        diagram: {
+          pieceCell: [1, 1],
+          enemyCell: null,
+          moveCells: [[0, 0], [0, 2], [2, 0], [2, 2]],
+          captureCells: []
+        }
+      },
+      3: {
+        name: "Cross Sentinel",
+        short: "Cross",
+        hint: "Cross: 1 square forward, back, left, or right. Cannot capture.",
+        rules: "Steps 1 square orthogonally (forward, backward, left, or right) into an empty square. Cannot capture opponent pieces.",
+        diagram: {
+          pieceCell: [1, 1],
+          enemyCell: null,
+          moveCells: [[0, 1], [2, 1], [1, 0], [1, 2]],
+          captureCells: []
+        }
+      },
+      4: {
+        name: "Anvil Striker",
+        short: "Anvil",
+        hint: "Anvil: 1 square left or right. Captures ONLY an enemy directly 1 square ahead.",
+        rules: "Slides 1 square left or right into an empty square. Cannot capture sideways—captures ONLY when an opponent piece stands directly 1 square straight in front of it, by advancing onto that square.",
+        diagram: {
+          pieceCell: [2, 1],
+          enemyCell: [1, 1],
+          moveCells: [[2, 0], [2, 2]],
+          captureCells: [[1, 1]]
+        }
+      }
+    };
+
+    function shadeHex(hex, amount) {
+      const clean = hex.replace('#', '');
+      const num = parseInt(clean, 16);
+      const r = Math.min(255, Math.max(0, ((num >> 16) & 255) + amount));
+      const g = Math.min(255, Math.max(0, ((num >> 8) & 255) + amount));
+      const b = Math.min(255, Math.max(0, (num & 255) + amount));
+      return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+    }
+
+    function renderPieceSVG(type, color) {
+      const darkRim = shadeHex(color, -42);
+      const lightHighlight = shadeHex(color, 38);
+
+      // Sculpted Staunton-inspired silhouettes with double-stroke plinths & inner reliefs
+      switch (type) {
+        case 1: // Crescent Vanguard
+          return `<svg viewBox="0 0 48 48" class="w-full h-full">
+            <path d="M29.5 6.5C19.5 6.5 13 12.6 13 20.8C13 25.6 15.6 29.6 19.6 31.7L16.2 37.5H31.8L28.4 31.7C30.6 30.5 32.3 28.8 33.4 26.7C31.5 27.8 29.4 28.4 27.1 28.4C21.5 28.4 17.8 25 17.8 20.4C17.8 15.8 21.5 12.4 27.1 12.4C29.4 12.4 31.5 13 33.4 14.1C32.2 9.9 31 6.5 29.5 6.5Z"
+                  fill="${color}" stroke="${darkRim}" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M20.5 34.2H27.5" stroke="${lightHighlight}" stroke-width="1.6" stroke-linecap="round"/>
+            <rect x="13" y="37.5" width="22" height="3.2" rx="1.4" fill="${color}" stroke="${darkRim}" stroke-width="1.5"/>
+            <rect x="10.5" y="40.7" width="27" height="3.8" rx="1.8" fill="${color}" stroke="${darkRim}" stroke-width="1.6"/>
+          </svg>`;
+        case 2: // Windmill Strider
+          return `<svg viewBox="0 0 48 48" class="w-full h-full">
+            <path d="M20.2 23L16.2 37.5H31.8L27.8 23H20.2Z" fill="${color}" stroke="${darkRim}" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M24 18.8L14 8.8L10.4 12.4L20.4 22.4L24 18.8Z" fill="${color}" stroke="${darkRim}" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M24 18.8L34 8.8L37.6 12.4L27.6 22.4L24 18.8Z" fill="${color}" stroke="${darkRim}" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M24 18.8L14 28.8L10.4 25.2L20.4 15.2L24 18.8Z" fill="${color}" stroke="${darkRim}" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M24 18.8L34 28.8L37.6 25.2L27.6 15.2L24 18.8Z" fill="${color}" stroke="${darkRim}" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="24" cy="18.8" r="3" fill="${lightHighlight}" stroke="${darkRim}" stroke-width="1.4"/>
+            <rect x="13" y="37.5" width="22" height="3.2" rx="1.4" fill="${color}" stroke="${darkRim}" stroke-width="1.5"/>
+            <rect x="10.5" y="40.7" width="27" height="3.8" rx="1.8" fill="${color}" stroke="${darkRim}" stroke-width="1.6"/>
+          </svg>`;
+        case 3: // Cross Sentinel
+          return `<svg viewBox="0 0 48 48" class="w-full h-full">
+            <path d="M18.2 30.5L15.8 37.5H32.2L29.8 30.5H18.2Z" fill="${color}" stroke="${darkRim}" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M20 7.5H28V15H36.5V23H28V31H20V23H11.5V15H20V7.5Z" fill="${color}" stroke="${darkRim}" stroke-width="1.6" stroke-linejoin="round"/>
+            <circle cx="24" cy="19" r="2.2" fill="${lightHighlight}"/>
+            <rect x="13" y="37.5" width="22" height="3.2" rx="1.4" fill="${color}" stroke="${darkRim}" stroke-width="1.5"/>
+            <rect x="10.5" y="40.7" width="27" height="3.8" rx="1.8" fill="${color}" stroke="${darkRim}" stroke-width="1.6"/>
+          </svg>`;
+        case 4: // Anvil Striker
+          return `<svg viewBox="0 0 48 48" class="w-full h-full">
+            <path d="M17.5 30.5L15.2 37.5H32.8L30.5 30.5H17.5Z" fill="${color}" stroke="${darkRim}" stroke-width="1.6" stroke-linejoin="round"/>
+            <rect x="19" y="15.5" width="10" height="15.5" fill="${color}" stroke="${darkRim}" stroke-width="1.6"/>
+            <path d="M9.5 8.5H38.5L36.5 15.8H11.5L9.5 8.5Z" fill="${color}" stroke="${darkRim}" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M14 11.8H34" stroke="${lightHighlight}" stroke-width="1.6" stroke-linecap="round"/>
+            <rect x="13" y="37.5" width="22" height="3.2" rx="1.4" fill="${color}" stroke="${darkRim}" stroke-width="1.5"/>
+            <rect x="10.5" y="40.7" width="27" height="3.8" rx="1.8" fill="${color}" stroke="${darkRim}" stroke-width="1.6"/>
+          </svg>`;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. SOFT TACTILE AUDIO ENGINE & OPTIONAL AMBIENT LO-FI
+    // -------------------------------------------------------------------------
+    const AudioEngine = {
+      ctx: null,
+      soundEnabled: true,
+      ambientEnabled: false,
+      ambientTimer: null,
+      ensureCtx() {
+        if (!this.ctx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) this.ctx = new Ctx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+      },
+      tap(freq = 280, dur = 0.06, vol = 0.08) {
+        if (!this.soundEnabled) return;
+        this.ensureCtx();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.62, now + dur);
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + dur);
+      },
+      select() { this.tap(460, 0.04, 0.05); },
+      move() { this.tap(250, 0.075, 0.09); },
+      capture() {
+        this.tap(195, 0.085, 0.11);
+        setTimeout(() => this.tap(130, 0.11, 0.11), 38);
+      },
+      win() {
+        [440, 554.37, 659.25, 880].forEach((f, i) => setTimeout(() => this.tap(f, 0.18, 0.075), i * 75));
+      },
+      setAmbient(on) {
+        this.ambientEnabled = on;
+        if (this.ambientTimer) {
+          clearInterval(this.ambientTimer);
+          this.ambientTimer = null;
+        }
+        if (on) {
+          const chords = [[261.63, 329.63, 392.0], [220.0, 261.63, 329.63], [174.61, 220.0, 261.63], [196.0, 246.94, 293.66]];
+          let step = 0;
+          const playChord = () => {
+            if (!this.ambientEnabled) return;
+            this.ensureCtx();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            chords[step % chords.length].forEach(freq => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freq, now);
+              gain.gain.setValueAtTime(0.001, now);
+              gain.gain.linearRampToValueAtTime(0.014, now + 0.6);
+              gain.gain.exponentialRampToValueAtTime(0.0008, now + 2.8);
+              osc.connect(gain);
+              gain.connect(this.ctx.destination);
+              osc.start(now);
+              osc.stop(now + 2.9);
+            });
+            step++;
+          };
+          playChord();
+          this.ambientTimer = setInterval(playChord, 3000);
+        }
+      }
+    };
+
+    // -------------------------------------------------------------------------
+    // 3. SETTINGS & THEME STATE
+    // -------------------------------------------------------------------------
+    const Config = {
+      theme: 'light',
+      confirmMove: false,
+      showValidMoves: true,
+      showEvalBar: true,
+      p1Color: '#7C3AED',
+      p2Color: '#E11D48'
+    };
+
+    const PRESET_COLORS = ['#7C3AED', '#E11D48', '#2563EB', '#059669', '#D97706', '#DB2777', '#0284C7', '#4F46E5'];
+
+    function syncVisualPreferences() {
+      document.documentElement.style.setProperty('--p1-color', Config.p1Color);
+      document.documentElement.style.setProperty('--p2-color', Config.p2Color);
+
+      if (Config.theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+        document.getElementById('icon-sun').classList.remove('hidden');
+        document.getElementById('icon-moon').classList.add('hidden');
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+        document.getElementById('icon-sun').classList.add('hidden');
+        document.getElementById('icon-moon').classList.remove('hidden');
+      }
+
+      document.getElementById('eval-bar-container').classList.toggle('hidden', !Config.showEvalBar);
+      document.getElementById('eval-label-top').classList.toggle('hidden', !Config.showEvalBar);
+
+      renderLobbyStrip();
+      renderRulesModalPieces();
+      if (!document.getElementById('view-game').classList.contains('hidden')) {
+        renderBoard();
+        renderPieces();
+        updateHud();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. GAME STATE & EXACT RULES ENGINE (4x12)
+    // -------------------------------------------------------------------------
+    const State = {
+      lobbyMode: 'bot',     // 'bot' | 'online' | 'local'
+      botDiff: 'tactical',  // 'casual' | 'tactical'
+      gameMode: 'bot',
+      localPlayer: 1,       // 1 = Bottom, 2 = Top
+      flipped: false,
+      turn: 1,
+      moveCount: 1,
+      pieces: [],           // { id, owner: 1|2, type: 1|2|3|4, r, c }
+      history: [],
+      capturedBy1: [],      // array of piece types captured by P1
+      capturedBy2: [],      // array of piece types captured by P2
+      lastMove: null,       // { fromR, fromC, toR, toC }
+      rippleAt: null,       // { r, c, color }
+      selectedId: null,
+      validMoves: [],
+      stagedMove: null,
+      winner: null,
+      roomId: null,
+      busy: false,
+      waitSeconds: 0,
+      waitTimerId: null
+    };
+
+    function buildInitialPieces() {
+      const list = [];
+      let id = 1;
+      // Opponent (Player 2, Top): Row 1 [1,2,2,1], Row 2 [4,3,3,4]
+      [1, 2, 2, 1].forEach((type, c) => list.push({ id: `pc_${id++}`, owner: 2, type, r: 1, c }));
+      [4, 3, 3, 4].forEach((type, c) => list.push({ id: `pc_${id++}`, owner: 2, type, r: 2, c }));
+      // You (Player 1, Bottom): Row 9 [4,3,3,4], Row 10 [1,2,2,1]
+      [4, 3, 3, 4].forEach((type, c) => list.push({ id: `pc_${id++}`, owner: 1, type, r: 9, c }));
+      [1, 2, 2, 1].forEach((type, c) => list.push({ id: `pc_${id++}`, owner: 1, type, r: 10, c }));
+      return list;
+    }
+
+    function pieceAt(pieces, r, c) {
+      return pieces.find(p => p.r === r && p.c === c) || null;
+    }
+
+    function inside(r, c) {
+      return r >= 0 && r < 12 && c >= 0 && c < 4;
+    }
+
+    function isTargetGoal(owner, r) {
+      return owner === 1 ? r === 0 : r === 11;
+    }
+
+    function isHomeGoal(owner, r) {
+      return owner === 1 ? r === 11 : r === 0;
+    }
+
+    function getLegalMoves(piece, pieces) {
+      const moves = [];
+      const fwd = piece.owner === 1 ? -1 : 1;
+      const bwd = -fwd;
+      const { r, c, type, owner } = piece;
+
+      const tryEmpty = (nr, nc) => {
+        if (!inside(nr, nc) || isHomeGoal(owner, nr)) return false;
+        if (!pieceAt(pieces, nr, nc)) {
+          moves.push({
+            r: nr,
+            c: nc,
+            isCapture: false,
+            capturedId: null,
+            capturedType: null,
+            isJump: false,
+            isGoal: isTargetGoal(owner, nr)
+          });
+          return true;
+        }
+        return false;
+      };
+
+      if (type === 1) {
+        // 1. Crescent Vanguard: 1 or 2 forward, 1 backward; captures ONLY by jumping forward over adjacent enemy
+        const r1 = r + fwd;
+        const r2 = r + fwd * 2;
+        if (inside(r1, c)) {
+          const front1 = pieceAt(pieces, r1, c);
+          if (!front1) {
+            tryEmpty(r1, c);
+            if (inside(r2, c) && !pieceAt(pieces, r2, c)) {
+              tryEmpty(r2, c);
+            }
+          } else if (front1.owner !== owner) {
+            if (inside(r2, c) && !isHomeGoal(owner, r2) && !pieceAt(pieces, r2, c)) {
+              moves.push({
+                r: r2,
+                c,
+                isCapture: true,
+                capturedId: front1.id,
+                capturedType: front1.type,
+                isJump: true,
+                isGoal: isTargetGoal(owner, r2)
+              });
+            }
+          }
+        }
+        tryEmpty(r + bwd, c);
+      } else if (type === 2) {
+        // 2. Windmill Strider: 1 square diagonally in any direction, cannot capture
+        for (const [dr, dc] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+          tryEmpty(r + dr, c + dc);
+        }
+      } else if (type === 3) {
+        // 3. Cross Sentinel: 1 square orthogonally (up, down, left, right), cannot capture
+        for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          tryEmpty(r + dr, c + dc);
+        }
+      } else if (type === 4) {
+        // 4. Anvil Striker: 1 square left or right; captures ONLY enemy directly 1 square in front
+        tryEmpty(r, c - 1);
+        tryEmpty(r, c + 1);
+        const r1 = r + fwd;
+        if (inside(r1, c)) {
+          const front = pieceAt(pieces, r1, c);
+          if (front && front.owner !== owner) {
+            moves.push({
+              r: r1,
+              c,
+              isCapture: true,
+              capturedId: front.id,
+              capturedType: front.type,
+              isJump: false,
+              isGoal: isTargetGoal(owner, r1)
+            });
+          }
+        }
+      }
+
+      return moves;
+    }
+
+    function playerHasMoves(owner, pieces) {
+      return pieces.some(p => p.owner === owner && getLegalMoves(p, pieces).length > 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. BOARD & PIECE RENDERING
+    // -------------------------------------------------------------------------
+    function toVisual(r, c) {
+      return State.flipped ? { vr: 11 - r, vc: 3 - c } : { vr: r, vc: c };
+    }
+
+    function hexAlpha(hex, alpha) {
+      const clean = hex.replace('#', '');
+      const num = parseInt(clean, 16);
+      return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+    }
+
+    const FILE_LABELS = ['A', 'B', 'C', 'D'];
+
+    function renderBoard() {
+      const cellsEl = document.getElementById('cells-layer');
+      cellsEl.innerHTML = '';
+
+      const selectedPiece = State.selectedId ? State.pieces.find(p => p.id === State.selectedId) : null;
+
+      for (let vr = 0; vr < 12; vr++) {
+        for (let vc = 0; vc < 4; vc++) {
+          const r = State.flipped ? 11 - vr : vr;
+          const c = State.flipped ? 3 - vc : vc;
+
+          const cell = document.createElement('div');
+          cell.className = 'board-cell';
+          const alt = (r + c) % 2 === 1;
+
+          if (r === 0) {
+            cell.classList.add('goal-zone-pattern');
+            cell.style.backgroundColor = hexAlpha(Config.p2Color, alt ? 0.24 : 0.16);
+          } else if (r === 11) {
+            cell.classList.add('goal-zone-pattern');
+            cell.style.backgroundColor = hexAlpha(Config.p1Color, alt ? 0.24 : 0.16);
+          } else {
+            cell.style.backgroundColor = alt ? 'var(--cell-dark)' : 'var(--cell-light)';
+          }
+
+          // Last move origin & destination tint
+          if (State.lastMove && ((State.lastMove.fromR === r && State.lastMove.fromC === c) || (State.lastMove.toR === r && State.lastMove.toC === c))) {
+            const lm = document.createElement('div');
+            lm.className = 'last-move-overlay';
+            cell.appendChild(lm);
+          }
+
+          // Selected piece origin highlight
+          if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) {
+            const sel = document.createElement('div');
+            sel.className = 'selected-tile-overlay';
+            sel.style.backgroundColor = selectedPiece.owner === 1 ? Config.p1Color : Config.p2Color;
+            cell.appendChild(sel);
+          }
+
+          // Subtle Goal Flag watermark in goal zone outer corners
+          if ((r === 0 || r === 11) && (c === 1 || c === 2)) {
+            const flag = document.createElement('div');
+            flag.className = 'pointer-events-none opacity-25';
+            flag.style.color = r === 0 ? Config.p2Color : Config.p1Color;
+            flag.innerHTML = `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3v18h2v-7h10l-2-4 2-4H7V3H5z"/></svg>`;
+            cell.appendChild(flag);
+          }
+
+          // Algebraic Coordinates on left edge (ranks 12..1) & bottom edge (files A..D)
+          if (vc === 0) {
+            const rankSpan = document.createElement('span');
+            rankSpan.className = 'coord-rank';
+            rankSpan.style.color = alt ? 'var(--coord-on-dark)' : 'var(--coord-on-light)';
+            rankSpan.textContent = String(12 - r);
+            cell.appendChild(rankSpan);
+          }
+          if (vr === 11) {
+            const fileSpan = document.createElement('span');
+            fileSpan.className = 'coord-file';
+            fileSpan.style.color = alt ? 'var(--coord-on-dark)' : 'var(--coord-on-light)';
+            fileSpan.textContent = FILE_LABELS[c];
+            cell.appendChild(fileSpan);
+          }
+
+          // Move & Capture Indicators
+          const move = Config.showValidMoves
+            ? State.validMoves.find(m => m.r === r && m.c === c)
+            : null;
+
+          if (move) {
+            if (move.isGoal) {
+              const g = document.createElement('div');
+              g.className = 'goal-target-badge';
+              g.innerHTML = `<svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><polyline points="20 6 9 17 4 12"/></svg>`;
+              cell.appendChild(g);
+            } else if (move.isCapture) {
+              const brackets = document.createElement('div');
+              brackets.className = 'capture-brackets';
+              const activeCol = State.turn === 1 ? Config.p1Color : Config.p2Color;
+              brackets.innerHTML = `<svg viewBox="0 0 40 40" class="w-full h-full" fill="none" stroke="${activeCol}" stroke-width="3.2" stroke-linecap="round">
+                <path d="M3 11V3h8M29 3h8v8M37 29v8h-8M11 37H3v-8"/>
+              </svg>`;
+              cell.appendChild(brackets);
+            } else {
+              const dot = document.createElement('div');
+              dot.className = 'valid-dot';
+              dot.style.backgroundColor = State.turn === 1 ? Config.p1Color : Config.p2Color;
+              cell.appendChild(dot);
+            }
+          }
+
+          // Capture ripple effect
+          if (State.rippleAt && State.rippleAt.r === r && State.rippleAt.c === c) {
+            const rip = document.createElement('div');
+            rip.className = 'capture-ripple';
+            rip.style.color = State.rippleAt.color;
+            cell.appendChild(rip);
+          }
+
+          // Staged Confirm Move highlight
+          if (State.stagedMove && State.stagedMove.r === r && State.stagedMove.c === c) {
+            cell.style.boxShadow = 'inset 0 0 0 2.5px #10B981';
+          }
+
+          cell.addEventListener('click', () => onSquareClick(r, c));
+          cellsEl.appendChild(cell);
+        }
+      }
+    }
+
+    function renderPieces(jumpId = null) {
+      const layer = document.getElementById('pieces-layer');
+      const existing = new Map();
+      layer.querySelectorAll('.piece-node').forEach(el => existing.set(el.dataset.id, el));
+
+      const alive = new Set();
+      const userCanMove = canAct();
+
+      for (const p of State.pieces) {
+        alive.add(p.id);
+        let node = existing.get(p.id);
+        const color = p.owner === 1 ? Config.p1Color : Config.p2Color;
+
+        if (!node) {
+          node = document.createElement('div');
+          node.className = 'piece-node';
+          node.dataset.id = p.id;
+          const body = document.createElement('div');
+          body.className = 'piece-body';
+          node.appendChild(body);
+          layer.appendChild(node);
+        }
+
+        const body = node.querySelector('.piece-body');
+        body.innerHTML = renderPieceSVG(p.type, color);
+
+        node.classList.toggle('selected', State.selectedId === p.id);
+        node.classList.toggle('movable', userCanMove && p.owner === State.turn);
+
+        if (jumpId === p.id) {
+          node.classList.remove('jumping');
+          void node.offsetWidth;
+          node.classList.add('jumping');
+        }
+
+        const { vr, vc } = toVisual(p.r, p.c);
+        node.style.transform = `translate(${vc * 100}%, ${vr * 100}%)`;
+      }
+
+      existing.forEach((node, id) => {
+        if (!alive.has(id)) {
+          node.style.opacity = '0';
+          setTimeout(() => node.remove(), 200);
+        }
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. TURN HANDLING, EVALUATION BAR, UNDO & AI
+    // -------------------------------------------------------------------------
+    function canAct() {
+      if (State.winner || State.busy) return false;
+      if (State.gameMode === 'local') return true;
+      if (State.gameMode === 'bot') return State.turn === 1;
+      if (State.gameMode === 'online') return State.turn === State.localPlayer;
+      return false;
+    }
+
+    function onSquareClick(r, c) {
+      if (State.winner || State.busy) return;
+
+      const clicked = pieceAt(State.pieces, r, c);
+      if (clicked) {
+        document.getElementById('piece-hint-line').textContent = PIECES[clicked.type].hint;
+      }
+
+      if (!canAct()) return;
+
+      // Check destination click
+      const targetMove = State.validMoves.find(m => m.r === r && m.c === c);
+      if (targetMove && State.selectedId) {
+        if (Config.confirmMove) {
+          State.stagedMove = { pieceId: State.selectedId, ...targetMove };
+          document.getElementById('confirm-bar').classList.remove('hidden');
+          renderBoard();
+          return;
+        } else {
+          commitMove(State.selectedId, targetMove);
+          return;
+        }
+      }
+
+      // Select own piece
+      if (clicked && clicked.owner === State.turn) {
+        State.stagedMove = null;
+        document.getElementById('confirm-bar').classList.add('hidden');
+        if (State.selectedId === clicked.id) {
+          State.selectedId = null;
+          State.validMoves = [];
+        } else {
+          State.selectedId = clicked.id;
+          State.validMoves = getLegalMoves(clicked, State.pieces);
+          AudioEngine.select();
+        }
+        renderBoard();
+        renderPieces();
+      } else {
+        State.selectedId = null;
+        State.validMoves = [];
+        State.stagedMove = null;
+        document.getElementById('confirm-bar').classList.add('hidden');
+        renderBoard();
+        renderPieces();
+      }
+    }
+
+    function commitMove(pieceId, move, isRemote = false) {
+      const piece = State.pieces.find(p => p.id === pieceId);
+      if (!piece) return;
+
+      // Save snapshot before player's move in Bot/Local modes for Undo
+      if (State.gameMode !== 'online' && !isRemote && (State.gameMode === 'local' || piece.owner === 1)) {
+        State.history.push({
+          pieces: State.pieces.map(p => ({ ...p })),
+          turn: State.turn,
+          moveCount: State.moveCount,
+          capturedBy1: [...State.capturedBy1],
+          capturedBy2: [...State.capturedBy2],
+          lastMove: State.lastMove ? { ...State.lastMove } : null
+        });
+      }
+
+      State.busy = true;
+      State.selectedId = null;
+      State.validMoves = [];
+      State.stagedMove = null;
+      document.getElementById('confirm-bar').classList.add('hidden');
+
+      State.lastMove = {
+        fromR: piece.r,
+        fromC: piece.c,
+        toR: move.r,
+        toC: move.c
+      };
+
+      if (move.isCapture && move.capturedId) {
+        const victim = State.pieces.find(p => p.id === move.capturedId);
+        State.rippleAt = {
+          r: victim ? victim.r : move.r,
+          c: victim ? victim.c : move.c,
+          color: piece.owner === 1 ? Config.p1Color : Config.p2Color
+        };
+        setTimeout(() => { State.rippleAt = null; }, 450);
+
+        State.pieces = State.pieces.filter(p => p.id !== move.capturedId);
+        if (piece.owner === 1) State.capturedBy1.push(move.capturedType || 1);
+        else State.capturedBy2.push(move.capturedType || 1);
+        AudioEngine.capture();
+      } else {
+        State.rippleAt = null;
+        AudioEngine.move();
+      }
+
+      piece.r = move.r;
+      piece.c = move.c;
+
+      renderBoard();
+      renderPieces(move.isJump ? piece.id : null);
+      updateHud();
+
+      setTimeout(() => {
+        State.busy = false;
+
+        // Win check 1: Reached opponent's Goal Zone
+        if (isTargetGoal(piece.owner, piece.r)) {
+          declareWinner(piece.owner, "Breached the opponent's goal zone.");
+          if (State.gameMode === 'online' && !isRemote) syncRoomToCloud();
+          return;
+        }
+
+        const next = piece.owner === 1 ? 2 : 1;
+        const oppCount = State.pieces.filter(p => p.owner === next).length;
+
+        // Win check 2: Eliminated all opponent pieces
+        if (oppCount === 0) {
+          declareWinner(piece.owner, "Eliminated all opposing pieces.");
+          if (State.gameMode === 'online' && !isRemote) syncRoomToCloud();
+          return;
+        }
+
+        // Win check 3: Opponent has zero legal moves
+        if (!playerHasMoves(next, State.pieces)) {
+          declareWinner(piece.owner, "Opponent has no legal moves remaining.");
+          if (State.gameMode === 'online' && !isRemote) syncRoomToCloud();
+          return;
+        }
+
+        if (next === 1) State.moveCount++;
+        State.turn = next;
+        updateHud();
+        renderPieces();
+
+        if (State.gameMode === 'online' && !isRemote) {
+          syncRoomToCloud();
+        } else if (State.gameMode === 'bot' && State.turn === 2 && !State.winner) {
+          setTimeout(runBotTurn, 380);
+        }
+      }, 270);
+    }
+
+    function undoLastMove() {
+      if (State.busy || State.gameMode === 'online' || State.history.length === 0) return;
+      const snap = State.history.pop();
+      State.pieces = snap.pieces;
+      State.turn = snap.turn;
+      State.moveCount = snap.moveCount;
+      State.capturedBy1 = snap.capturedBy1;
+      State.capturedBy2 = snap.capturedBy2;
+      State.lastMove = snap.lastMove;
+      State.rippleAt = null;
+      State.selectedId = null;
+      State.validMoves = [];
+      State.stagedMove = null;
+      State.winner = null;
+      document.getElementById('confirm-bar').classList.add('hidden');
+      document.getElementById('modal-victory').classList.add('hidden');
+      renderBoard();
+      renderPieces();
+      updateHud();
+    }
+
+    function declareWinner(owner, reason) {
+      State.winner = owner;
+      AudioEngine.win();
+      updateHud();
+
+      const heading = document.getElementById('victory-heading');
+      const desc = document.getElementById('victory-desc');
+      const badge = document.getElementById('victory-badge');
+
+      badge.style.backgroundColor = owner === 1 ? Config.p1Color : Config.p2Color;
+      if (State.gameMode === 'local') {
+        heading.textContent = owner === 1 ? 'Bottom Player Wins!' : 'Top Player Wins!';
+      } else {
+        heading.textContent = owner === State.localPlayer ? 'Victory!' : 'Defeat';
+      }
+      desc.textContent = reason;
+      setTimeout(() => document.getElementById('modal-victory').classList.remove('hidden'), 260);
+    }
+
+    function computeAdvantage() {
+      // Positive = Bottom (P1) advantage, Negative = Top (P2) advantage
+      let score = 0;
+      for (const p of State.pieces) {
+        const progress = p.owner === 1 ? (11 - p.r) : p.r; // 0..11
+        const val = 2.5 + Math.pow(progress / 10, 1.45) * 4.5 + (p.type === 1 ? 0.6 : 0);
+        score += p.owner === 1 ? val : -val;
+      }
+      return score;
+    }
+
+    function updateHud() {
+      const pill1 = document.getElementById('turn-pill-p1');
+      const pill2 = document.getElementById('turn-pill-p2');
+      const bar1 = document.getElementById('bar-p1');
+      const bar2 = document.getElementById('bar-p2');
+
+      if (State.turn === 1) {
+        pill1.classList.remove('hidden');
+        pill2.classList.add('hidden');
+        pill1.textContent = State.gameMode === 'online' && State.localPlayer !== 1 ? 'Turn' : 'Your Turn';
+        bar1.style.borderColor = Config.p1Color;
+        bar2.style.borderColor = 'var(--border-hairline)';
+      } else {
+        pill2.classList.remove('hidden');
+        pill1.classList.add('hidden');
+        pill2.textContent = State.gameMode === 'bot' ? 'Thinking...' : 'Turn';
+        bar2.style.borderColor = Config.p2Color;
+        bar1.style.borderColor = 'var(--border-hairline)';
+      }
+
+      document.getElementById('move-counter-badge').textContent = `Move ${State.moveCount}`;
+
+      // Render captured mini SVGs in trays
+      const tray1 = document.getElementById('tray-p1');
+      const tray2 = document.getElementById('tray-p2');
+      tray1.innerHTML = State.capturedBy1.map(t => `<span class="w-3.5 h-3.5 inline-block">${renderPieceSVG(t, Config.p2Color)}</span>`).join('');
+      tray2.innerHTML = State.capturedBy2.map(t => `<span class="w-3.5 h-3.5 inline-block">${renderPieceSVG(t, Config.p1Color)}</span>`).join('');
+
+      // Update Evaluation Bar
+      const adv = computeAdvantage();
+      const clamped = Math.max(-12, Math.min(12, adv));
+      const bottomPct = Math.round(50 + (clamped / 12) * 42);
+      const topPct = 100 - bottomPct;
+      document.getElementById('eval-fill-top').style.height = `${topPct}%`;
+      const absText = (Math.abs(adv) / 2.5).toFixed(1);
+      document.getElementById('eval-label-top').textContent = adv >= 0 ? `+${absText}` : `-${absText}`;
+
+      const undoBtn = document.getElementById('btn-undo');
+      undoBtn.disabled = State.gameMode === 'online' || State.history.length === 0 || State.busy;
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. BOT AI (2-PLY LOOKAHEAD)
+    // -------------------------------------------------------------------------
+    function scoreBoardForBot(pieces) {
+      let total = 0;
+      for (const p of pieces) {
+        const dist = p.owner === 2 ? p.r : (11 - p.r);
+        let val = dist * 13 + 32;
+        if (p.owner === 2 && p.r === 11) val += 10000;
+        if (p.owner === 1 && p.r === 0) val -= 10000;
+        if (p.type === 1) val += 8;
+        total += p.owner === 2 ? val : -val;
+      }
+      return total;
+    }
+
+    function cloneAndApply(pieces, pieceId, move) {
+      const copy = pieces.map(p => ({ ...p }));
+      const actor = copy.find(p => p.id === pieceId);
+      if (!actor) return copy;
+      if (move.isCapture && move.capturedId) {
+        const idx = copy.findIndex(p => p.id === move.capturedId);
+        if (idx !== -1) copy.splice(idx, 1);
+      }
+      actor.r = move.r;
+      actor.c = move.c;
+      return copy;
+    }
+
+    function runBotTurn() {
+      if (State.winner || State.turn !== 2) return;
+      const options = [];
+      for (const p of State.pieces) {
+        if (p.owner === 2) {
+          for (const m of getLegalMoves(p, State.pieces)) {
+            options.push({ pieceId: p.id, move: m });
+          }
+        }
+      }
+      if (options.length === 0) {
+        declareWinner(1, "Bot has no legal moves remaining.");
+        return;
+      }
+
+      const winNow = options.find(o => o.move.isGoal);
+      if (winNow) {
+        commitMove(winNow.pieceId, winNow.move);
+        return;
+      }
+
+      if (State.botDiff === 'casual') {
+        options.sort((a, b) => (b.move.r + (b.move.isCapture ? 2 : 0)) - (a.move.r + (a.move.isCapture ? 2 : 0)));
+        const pool = options.slice(0, Math.min(4, options.length));
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        commitMove(pick.pieceId, pick.move);
+        return;
+      }
+
+      let bestVal = -Infinity;
+      let bestSet = [];
+      for (const opt of options) {
+        const nextPieces = cloneAndApply(State.pieces, opt.pieceId, opt.move);
+        let worstReply = Infinity;
+        let oppMovesExist = false;
+        for (const op of nextPieces) {
+          if (op.owner === 1) {
+            for (const om of getLegalMoves(op, nextPieces)) {
+              oppMovesExist = true;
+              const afterOpp = cloneAndApply(nextPieces, op.id, om);
+              const val = scoreBoardForBot(afterOpp);
+              if (val < worstReply) worstReply = val;
+            }
+          }
+        }
+        const finalVal = oppMovesExist ? worstReply : 9999;
+        if (finalVal > bestVal) {
+          bestVal = finalVal;
+          bestSet = [opt];
+        } else if (finalVal === bestVal) {
+          bestSet.push(opt);
+        }
+      }
+
+      const chosen = bestSet[Math.floor(Math.random() * bestSet.length)];
+      commitMove(chosen.pieceId, chosen.move);
+    }
+
+    // -------------------------------------------------------------------------
+    // 8. ONLINE MULTIPLAYER (QUEUE + INVITE LINK / ROOM CODE)
+    // -------------------------------------------------------------------------
+    let db = null;
+    let auth = null;
+    let userId = null;
+    let unsubRoom = null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'getout-ekkman-site';
+
+    async function setupCloud() {
+      try {
+        if (typeof __firebase_config === 'undefined') return;
+        const app = initializeApp(JSON.parse(__firebase_config));
+        auth = getAuth(app);
+        db = getFirestore(app);
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+        userId = auth.currentUser?.uid || crypto.randomUUID();
+
+        const roomParam = new URLSearchParams(window.location.search).get('room');
+        if (roomParam && roomParam.trim().length >= 4) {
+          switchLobbyMode('online');
+          joinRoom(roomParam.trim().toUpperCase());
+        }
+      } catch (e) {
+        console.warn("Cloud offline:", e);
+      }
+    }
+
+    function randomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let out = '';
+      for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+      return out;
+    }
+
+    function showWaitBox(msg, code = null) {
+      const box = document.getElementById('lobby-wait-box');
+      const txt = document.getElementById('lobby-wait-text');
+      const row = document.getElementById('lobby-invite-row');
+      const timerEl = document.getElementById('lobby-wait-timer');
+
+      box.classList.remove('hidden');
+      txt.textContent = msg;
+
+      if (State.waitTimerId) clearInterval(State.waitTimerId);
+      State.waitSeconds = 0;
+      timerEl.textContent = '0:00';
+      State.waitTimerId = setInterval(() => {
+        State.waitSeconds++;
+        const m = Math.floor(State.waitSeconds / 60);
+        const s = String(State.waitSeconds % 60).padStart(2, '0');
+        timerEl.textContent = `${m}:${s}`;
+      }, 1000);
+
+      if (code) {
+        row.classList.remove('hidden');
+        document.getElementById('input-invite-url').value = `${window.location.origin}${window.location.pathname}?room=${code}`;
+      } else {
+        row.classList.add('hidden');
+      }
+    }
+
+    function hideWaitBox() {
+      if (State.waitTimerId) {
+        clearInterval(State.waitTimerId);
+        State.waitTimerId = null;
+      }
+      document.getElementById('lobby-wait-box').classList.add('hidden');
+    }
+
+    async function createRoom(isQueue = false) {
+      if (!db || !userId) {
+        showToast("Connecting to server...");
+        return;
+      }
+      const code = randomCode();
+      const ref = doc(db, 'artifacts', appId, 'public', 'data', 'getout_rooms', code);
+      await setDoc(ref, {
+        code,
+        hostId: userId,
+        guestId: null,
+        status: 'waiting',
+        isQueue,
+        turn: 1,
+        moveCount: 1,
+        piecesJson: JSON.stringify(buildInitialPieces()),
+        capturedBy1: [],
+        capturedBy2: [],
+        lastMove: null,
+        winner: null,
+        updatedAt: Date.now()
+      });
+
+      showWaitBox(isQueue ? `Searching queue` : `Room ${code}`, code);
+      listenRoom(code, 1);
+    }
+
+    async function findMatch() {
+      if (!db || !userId) {
+        showToast("Connecting to server...");
+        return;
+      }
+      showWaitBox("Searching queue");
+      try {
+        const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'getout_rooms'));
+        let candidate = null;
+        snap.forEach(d => {
+          const r = d.data();
+          if (r.status === 'waiting' && r.isQueue && r.hostId !== userId && (Date.now() - r.updatedAt < 180000)) {
+            candidate = r;
+          }
+        });
+        if (candidate) {
+          await joinRoom(candidate.code);
+        } else {
+          await createRoom(true);
+        }
+      } catch {
+        await createRoom(true);
+      }
+    }
+
+    async function joinRoom(code) {
+      if (!db || !userId) {
+        showToast("Connecting to server...");
+        return;
+      }
+      const clean = code.toUpperCase().trim();
+      const ref = doc(db, 'artifacts', appId, 'public', 'data', 'getout_rooms', clean);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        showToast("Room code not found.");
+        return;
+      }
+      const data = snap.data();
+      if (data.hostId === userId) {
+        listenRoom(clean, 1);
+        return;
+      }
+      if (data.status !== 'waiting' && data.guestId !== userId) {
+        showToast("Room is already full.");
+        return;
+      }
+      await updateDoc(ref, {
+        guestId: userId,
+        status: 'playing',
+        updatedAt: Date.now()
+      });
+      listenRoom(clean, 2);
+    }
+
+    function listenRoom(code, playerNum) {
+      if (unsubRoom) unsubRoom();
+      const ref = doc(db, 'artifacts', appId, 'public', 'data', 'getout_rooms', code);
+      unsubRoom = onSnapshot(ref, (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.status === 'playing') {
+          hideWaitBox();
+          const inGame = !document.getElementById('view-game').classList.contains('hidden');
+          if (!inGame || State.roomId !== code) {
+            beginMatch('online', playerNum, code);
+          }
+          State.pieces = JSON.parse(data.piecesJson);
+          State.turn = data.turn;
+          State.moveCount = data.moveCount || 1;
+          State.capturedBy1 = data.capturedBy1 || [];
+          State.capturedBy2 = data.capturedBy2 || [];
+          State.lastMove = data.lastMove || null;
+          renderBoard();
+          renderPieces();
+          updateHud();
+          if (data.winner && !State.winner) {
+            declareWinner(data.winner, "Match finished.");
+          }
+        }
+      }, (err) => console.warn(err));
+    }
+
+    async function syncRoomToCloud() {
+      if (!db || !State.roomId) return;
+      const ref = doc(db, 'artifacts', appId, 'public', 'data', 'getout_rooms', State.roomId);
+      await updateDoc(ref, {
+        turn: State.turn,
+        moveCount: State.moveCount,
+        piecesJson: JSON.stringify(State.pieces),
+        capturedBy1: State.capturedBy1,
+        capturedBy2: State.capturedBy2,
+        lastMove: State.lastMove,
+        winner: State.winner,
+        updatedAt: Date.now()
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. UI WIRING, VISUAL MINI-DIAGRAMS & NAVIGATION
+    // -------------------------------------------------------------------------
+    function renderLobbyStrip() {
+      const strip = document.getElementById('lobby-piece-strip');
+      if (!strip) return;
+      strip.innerHTML = [1, 2, 3, 4].map((t, idx) => `
+        <div class="w-9 h-9 p-1 rounded-xl subtle-surface flex items-center justify-center transition-transform hover:-translate-y-0.5" title="${PIECES[t].name}">
+          ${renderPieceSVG(t, idx % 2 === 0 ? Config.p1Color : Config.p2Color)}
+        </div>
+      `).join('');
+    }
+
+    function switchLobbyMode(mode) {
+      State.lobbyMode = mode;
+      document.querySelectorAll('.mode-pill').forEach(btn => {
+        if (btn.dataset.mode === mode) {
+          btn.className = 'mode-pill py-1.5 rounded-lg text-xs font-semibold transition card-surface shadow-xs';
+        } else {
+          btn.className = 'mode-pill py-1.5 rounded-lg text-xs font-medium muted-text hover:opacity-90 transition';
+        }
+      });
+      document.getElementById('panel-bot').classList.toggle('hidden', mode !== 'bot');
+      document.getElementById('panel-bot').classList.toggle('flex', mode === 'bot');
+      document.getElementById('panel-online').classList.toggle('hidden', mode !== 'online');
+      document.getElementById('panel-online').classList.toggle('flex', mode === 'online');
+      document.getElementById('panel-local').classList.toggle('hidden', mode !== 'local');
+      document.getElementById('panel-local').classList.toggle('flex', mode === 'local');
+    }
+
+    function beginMatch(mode, localPlayer = 1, roomId = null) {
+      State.gameMode = mode;
+      State.localPlayer = localPlayer;
+      State.flipped = (mode === 'online' && localPlayer === 2);
+      State.turn = 1;
+      State.moveCount = 1;
+      State.pieces = buildInitialPieces();
+      State.history = [];
+      State.capturedBy1 = [];
+      State.capturedBy2 = [];
+      State.lastMove = null;
+      State.rippleAt = null;
+      State.selectedId = null;
+      State.validMoves = [];
+      State.stagedMove = null;
+      State.winner = null;
+      State.roomId = roomId;
+      State.busy = false;
+
+      document.getElementById('modal-victory').classList.add('hidden');
+      document.getElementById('confirm-bar').classList.add('hidden');
+      document.getElementById('view-lobby').classList.add('hidden');
+      document.getElementById('view-game').classList.remove('hidden');
+      document.getElementById('view-game').classList.add('flex');
+      document.getElementById('piece-hint-line').textContent = 'Select a piece to inspect its moves.';
+
+      const p1Name = document.getElementById('label-p1-name');
+      const p2Name = document.getElementById('label-p2-name');
+      const av1 = document.getElementById('avatar-p1');
+      const av2 = document.getElementById('avatar-p2');
+
+      if (mode === 'bot') {
+        p1Name.textContent = 'You';
+        p2Name.textContent = `Bot (${State.botDiff === 'casual' ? 'Casual' : 'Tactical'})`;
+        av1.textContent = 'YOU';
+        av2.textContent = 'BOT';
+      } else if (mode === 'local') {
+        p1Name.textContent = 'Player 1';
+        p2Name.textContent = 'Player 2';
+        av1.textContent = 'P1';
+        av2.textContent = 'P2';
+      } else {
+        p1Name.textContent = localPlayer === 1 ? 'You' : 'Opponent';
+        p2Name.textContent = localPlayer === 2 ? 'You' : 'Opponent';
+        av1.textContent = localPlayer === 1 ? 'YOU' : 'OPP';
+        av2.textContent = localPlayer === 2 ? 'YOU' : 'OPP';
+      }
+
+      renderBoard();
+      renderPieces();
+      updateHud();
+    }
+
+    function leaveToLobby() {
+      if (unsubRoom) {
+        unsubRoom();
+        unsubRoom = null;
+      }
+      hideWaitBox();
+      document.getElementById('modal-victory').classList.add('hidden');
+      document.getElementById('view-game').classList.add('hidden');
+      document.getElementById('view-game').classList.remove('flex');
+      document.getElementById('view-lobby').classList.remove('hidden');
+    }
+
+    function buildMiniDiagramHTML(type) {
+      const { pieceCell, enemyCell, moveCells, captureCells } = PIECES[type].diagram;
+      const rows = type === 1 || type === 4 ? 4 : 3;
+      const cols = 3;
+      let cells = '';
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const alt = (r + c) % 2 === 1;
+          const isPiece = pieceCell[0] === r && pieceCell[1] === c;
+          const isEnemy = enemyCell && enemyCell[0] === r && enemyCell[1] === c;
+          const isMove = moveCells.some(([mr, mc]) => mr === r && mc === c);
+          const isCap = captureCells.some(([cr, cc]) => cr === r && cc === c);
+
+          let inner = '';
+          if (isPiece) {
+            inner = `<div class="w-5 h-5">${renderPieceSVG(type, Config.p1Color)}</div>`;
+          } else if (isEnemy && !isCap) {
+            inner = `<div class="w-4 h-4 opacity-85">${renderPieceSVG(3, Config.p2Color)}</div>`;
+          } else if (isCap) {
+            inner = `<div class="relative w-full h-full flex items-center justify-center">
+              ${isEnemy ? `<div class="w-4 h-4 opacity-75">${renderPieceSVG(3, Config.p2Color)}</div>` : ''}
+              <span class="absolute inset-1 rounded-xs border-2 border-rose-500"></span>
+            </div>`;
+          } else if (isMove) {
+            inner = `<span class="w-2 h-2 rounded-full" style="background-color: ${Config.p1Color};"></span>`;
+          }
+
+          cells += `<div class="w-6 h-6 flex items-center justify-center border-r border-b hairline-border ${alt ? 'bg-black/[0.04] dark:bg-white/[0.04]' : ''}">${inner}</div>`;
+        }
+      }
+
+      return `<div class="grid grid-cols-3 border-t border-l hairline-border rounded-md overflow-hidden shrink-0 card-surface">${cells}</div>`;
+    }
+
+    function renderRulesModalPieces() {
+      const container = document.getElementById('rules-pieces-container');
+      container.innerHTML = [1, 2, 3, 4].map(t => `
+        <div class="p-3 rounded-xl subtle-surface flex items-center justify-between gap-3">
+          <div class="flex flex-col gap-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <div class="w-5 h-5 shrink-0">${renderPieceSVG(t, Config.p1Color)}</div>
+              <span class="font-bold text-xs">${PIECES[t].name}</span>
+            </div>
+            <p class="text-[11px] muted-text leading-relaxed">${PIECES[t].rules}</p>
+          </div>
+          ${buildMiniDiagramHTML(t)}
+        </div>
+      `).join('');
+    }
+
+    function renderColorSwatches() {
+      const renderRow = (elId, targetKey) => {
+        const el = document.getElementById(elId);
+        el.innerHTML = PRESET_COLORS.map(hex => `
+          <button data-target="${targetKey}" data-hex="${hex}"
+                  class="color-swatch w-5 h-5 rounded-full border transition-transform hover:scale-110 ${Config[targetKey].toLowerCase() === hex.toLowerCase() ? 'ring-2 ring-offset-1 ring-slate-400' : 'border-transparent'}"
+                  style="background-color: ${hex};"></button>
+        `).join('');
+      };
+      renderRow('swatches-p1', 'p1Color');
+      renderRow('swatches-p2', 'p2Color');
+
+      document.querySelectorAll('.color-swatch').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.target;
+          const hex = btn.dataset.hex;
+          Config[key] = hex;
+          document.getElementById(key === 'p1Color' ? 'color-p1' : 'color-p2').value = hex;
+          renderColorSwatches();
+          syncVisualPreferences();
+        });
+      });
+    }
+
+    function syncSoundIcons() {
+      document.getElementById('icon-sound-on').classList.toggle('hidden', !AudioEngine.soundEnabled);
+      document.getElementById('icon-sound-off').classList.toggle('hidden', AudioEngine.soundEnabled);
+      document.getElementById('opt-sound').checked = AudioEngine.soundEnabled;
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.opacity = '1';
+      clearTimeout(t._id);
+      t._id = setTimeout(() => { t.style.opacity = '0'; }, 2200);
+    }
+
+    // Event Listeners
+    document.querySelectorAll('.mode-pill').forEach(btn => {
+      btn.addEventListener('click', () => switchLobbyMode(btn.dataset.mode));
+    });
+
+    document.querySelectorAll('.diff-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        State.botDiff = btn.dataset.diff;
+        document.getElementById('diff-caption').textContent = State.botDiff === 'casual' ? 'Relaxed pace' : '2-ply lookahead';
+        document.querySelectorAll('.diff-pill').forEach(b => {
+          if (b.dataset.diff === State.botDiff) {
+            b.className = 'diff-pill py-2 px-3 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5';
+            b.style.borderColor = 'var(--p1-color)';
+            b.style.color = 'var(--p1-color)';
+          } else {
+            b.className = 'diff-pill py-2 px-3 rounded-xl text-xs font-medium subtle-surface transition flex items-center justify-center gap-1.5';
+            b.style.borderColor = '';
+            b.style.color = '';
+          }
+        });
+      });
+    });
+
+    document.getElementById('btn-start-bot').addEventListener('click', () => beginMatch('bot'));
+    document.getElementById('btn-start-local').addEventListener('click', () => beginMatch('local'));
+    document.getElementById('btn-find-match').addEventListener('click', findMatch);
+    document.getElementById('btn-create-room').addEventListener('click', () => createRoom(false));
+    document.getElementById('btn-join-room').addEventListener('click', () => {
+      const code = document.getElementById('input-room-code').value;
+      if (code.trim().length >= 4) joinRoom(code);
+      else showToast('Enter a valid room code.');
+    });
+    document.getElementById('btn-cancel-wait').addEventListener('click', () => {
+      if (unsubRoom) unsubRoom();
+      hideWaitBox();
+    });
+    document.getElementById('btn-copy-link').addEventListener('click', () => {
+      const inp = document.getElementById('input-invite-url');
+      inp.select();
+      document.execCommand('copy');
+      showToast('Invite link copied!');
+    });
+
+    // Gameplay Controls
+    document.getElementById('btn-nav-home').addEventListener('click', leaveToLobby);
+    document.getElementById('btn-leave').addEventListener('click', leaveToLobby);
+    document.getElementById('btn-win-home').addEventListener('click', leaveToLobby);
+    document.getElementById('btn-undo').addEventListener('click', undoLastMove);
+    document.getElementById('btn-restart').addEventListener('click', () => {
+      beginMatch(State.gameMode, State.localPlayer, State.roomId);
+      if (State.gameMode === 'online') syncRoomToCloud();
+    });
+    document.getElementById('btn-win-again').addEventListener('click', () => {
+      beginMatch(State.gameMode, State.localPlayer, State.roomId);
+      if (State.gameMode === 'online') syncRoomToCloud();
+    });
+    document.getElementById('btn-confirm-move').addEventListener('click', () => {
+      if (State.stagedMove) commitMove(State.stagedMove.pieceId, State.stagedMove);
+    });
+    document.getElementById('btn-cancel-move').addEventListener('click', () => {
+      State.stagedMove = null;
+      document.getElementById('confirm-bar').classList.add('hidden');
+      renderBoard();
+    });
+
+    // Header Sound & Theme Toggles
+    document.getElementById('btn-quick-sound').addEventListener('click', () => {
+      AudioEngine.soundEnabled = !AudioEngine.soundEnabled;
+      syncSoundIcons();
+      if (AudioEngine.soundEnabled) AudioEngine.select();
+    });
+
+    document.getElementById('btn-toggle-theme').addEventListener('click', () => {
+      Config.theme = Config.theme === 'light' ? 'dark' : 'light';
+      syncVisualPreferences();
+    });
+
+    // Modals
+    const openRules = () => document.getElementById('modal-rules').classList.remove('hidden');
+    const closeRules = () => document.getElementById('modal-rules').classList.add('hidden');
+    document.getElementById('btn-open-rules').addEventListener('click', openRules);
+    document.getElementById('btn-lobby-rules').addEventListener('click', openRules);
+    document.getElementById('btn-close-rules').addEventListener('click', closeRules);
+
+    document.getElementById('btn-open-settings').addEventListener('click', () => {
+      document.getElementById('modal-settings').classList.remove('hidden');
+    });
+    document.getElementById('btn-close-settings').addEventListener('click', () => {
+      document.getElementById('modal-settings').classList.add('hidden');
+    });
+
+    document.getElementById('opt-confirm').addEventListener('change', (e) => {
+      Config.confirmMove = e.target.checked;
+      State.stagedMove = null;
+      document.getElementById('confirm-bar').classList.add('hidden');
+      renderBoard();
+    });
+    document.getElementById('opt-valid').addEventListener('change', (e) => {
+      Config.showValidMoves = e.target.checked;
+      renderBoard();
+    });
+    document.getElementById('opt-eval').addEventListener('change', (e) => {
+      Config.showEvalBar = e.target.checked;
+      syncVisualPreferences();
+    });
+    document.getElementById('opt-sound').addEventListener('change', (e) => {
+      AudioEngine.soundEnabled = e.target.checked;
+      syncSoundIcons();
+    });
+    document.getElementById('opt-ambient').addEventListener('change', (e) => {
+      AudioEngine.setAmbient(e.target.checked);
+    });
+
+    document.getElementById('color-p1').addEventListener('input', (e) => {
+      Config.p1Color = e.target.value;
+      renderColorSwatches();
+      syncVisualPreferences();
+    });
+    document.getElementById('color-p2').addEventListener('input', (e) => {
+      Config.p2Color = e.target.value;
+      renderColorSwatches();
+      syncVisualPreferences();
+    });
+    document.getElementById('btn-reset-colors').addEventListener('click', () => {
+      Config.p1Color = '#7C3AED';
+      Config.p2Color = '#E11D48';
+      document.getElementById('color-p1').value = Config.p1Color;
+      document.getElementById('color-p2').value = Config.p2Color;
+      renderColorSwatches();
+      syncVisualPreferences();
+    });
+
+    // Boot
+    window.addEventListener('DOMContentLoaded', () => {
+      renderColorSwatches();
+      syncSoundIcons();
+      syncVisualPreferences();
+      setupCloud();
+    });
+  </script>
+</body>
+</html>
